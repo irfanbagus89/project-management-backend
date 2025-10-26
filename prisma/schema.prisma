@@ -1,0 +1,905 @@
+// Prisma schema generated to match the user's project spec (A–I)
+// Multi-tenant via orgId on almost all entities; audit columns; soft-delete where relevant
+// PostgreSQL provider
+
+// ----------------------
+// Generator & Datasource
+// ----------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------
+// Enums (derived from spec)
+// ----------------------
+
+enum ProjectStatus {
+  active
+  archived
+}
+
+enum SprintState {
+  planned
+  active
+  closed
+}
+
+enum WorkflowStatusType {
+  todo
+  in_progress
+  review
+  done
+}
+
+enum TaskType {
+  task
+  bug
+  story
+}
+
+enum TaskPriority {
+  low
+  med
+  high
+  urgent
+}
+
+enum MemberStatus {
+  active
+  invited
+  disabled
+}
+
+enum ReminderChannel {
+  inapp
+  email
+  push
+}
+
+enum IntegrationProvider {
+  github
+  gitlab
+  slack
+  drive
+  dropbox
+  other
+}
+
+enum SourceCalendar {
+  internal
+  google
+  outlook
+}
+
+// ----------------------
+// A. Identity & Access (RBAC, Multi-tenant)
+// ----------------------
+
+model Organization {
+  id       String  @id @default(cuid())
+  name     String
+  slug     String  @unique
+  logoUrl  String?
+  plan     String? @default("free")
+  timezone String? @default("Asia/Jakarta")
+
+  members      OrgMember[]
+  projects     Project[]
+  teams        Team[]
+  roles        Role[]
+  apiTokens    ApiToken[]
+  integrations Integration[]
+  webhooks     Webhook[]
+
+  rolePermissions   RolePermission[]
+  teamMembers       TeamMember[]
+  projectMembers    ProjectMember[]
+  workflows         Workflow[]
+  workflowStatuses  WorkflowStatus[]
+  labels            Label[]
+  milestones        Milestone[]
+  sprints           Sprint[]
+  tasks             Task[]
+  taskDependencies  TaskDependency[]
+  checklists        Checklist[]
+  checklistItems    ChecklistItem[]
+  comments          Comment[]
+  reactions         Reaction[]
+  attachments       Attachment[]
+  watchers          Watcher[]
+  docs              Doc[]
+  docVersions       DocVersion[]
+  spaces            Space[]
+  docLinks          DocLink[]
+  timeEntries       TimeEntry[]
+  capacityPlans     CapacityPlan[]
+  holidays          Holiday[]
+  events            Event[]
+  reminders         Reminder[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+  automationRules   AutomationRule[]
+  scheduledReports  ScheduledReport[]
+  searchIndices     SearchIndex[]
+  metricsDaily      MetricsDaily[]
+  customFieldDefs   CustomFieldDef[]
+  customFieldValues CustomFieldValue[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  avatarUrl    String?
+  passwordHash String?
+  locale       String?   @default("id")
+  timezone     String?   @default("Asia/Jakarta")
+  lastLoginAt  DateTime?
+
+  memberships        OrgMember[]
+  comments           Comment[]       @relation("CommentAuthor")
+  reactions          Reaction[]
+  timeEntries        TimeEntry[]
+  eventsCreated      Event[]         @relation("EventCreator")
+  teamMemberships    TeamMember[]
+  projectMemberships ProjectMember[]
+
+  reportedTasks       Task[]         @relation("TaskReporter")
+  assignedTasks       Task[]         @relation("TaskAssignee")
+  uploadedAttachments Attachment[]
+  watchedTasks        Watcher[]
+  createdDocs         Doc[]          @relation("DocCreatedBy")
+  updatedDocs         Doc[]          @relation("DocUpdatedBy")
+  createdDocVersions  DocVersion[]
+  capacityPlans       CapacityPlan[]
+  reminders           Reminder[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+
+  sessions      Session[]
+  oauthAccounts OAuthAccount[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrgMember {
+  id       String       @id @default(cuid())
+  org      Organization @relation(fields: [orgId], references: [id])
+  orgId    String
+  user     User         @relation(fields: [userId], references: [id])
+  userId   String
+  status   MemberStatus @default(active)
+  role     Role?        @relation(fields: [roleId], references: [id])
+  roleId   String?
+  joinedAt DateTime?    @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, userId])
+  @@index([orgId, userId])
+}
+
+model Team {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  name        String
+  description String?
+
+  members TeamMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, name])
+}
+
+model TeamMember {
+  id     String       @id @default(cuid())
+  org    Organization @relation(fields: [orgId], references: [id])
+  orgId  String
+  team   Team         @relation(fields: [teamId], references: [id])
+  teamId String
+  user   User         @relation(fields: [userId], references: [id])
+  userId String
+  role   String // owner/lead/member
+
+  @@unique([teamId, userId])
+  @@index([orgId, teamId])
+}
+
+model Role {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  name        String
+  description String?
+  scope       String // org/project
+
+  rolePermissions RolePermission[]
+
+  // Tambahan:
+  orgMembers     OrgMember[]
+  projectMembers ProjectMember[]
+
+  @@unique([orgId, name])
+}
+
+model Permission {
+  id          String  @id @default(cuid())
+  code        String  @unique // e.g., project.view, task.edit
+  description String?
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String       @id @default(cuid())
+  org          Organization @relation(fields: [orgId], references: [id])
+  orgId        String
+  role         Role         @relation(fields: [roleId], references: [id])
+  roleId       String
+  permission   Permission   @relation(fields: [permissionId], references: [id])
+  permissionId String
+
+  @@unique([roleId, permissionId])
+}
+
+// Auth / Sessions / Integrations (Auth-related)
+
+model Session {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+}
+
+model OAuthAccount {
+  id                String  @id @default(cuid())
+  user              User    @relation(fields: [userId], references: [id])
+  userId            String
+  provider          String
+  providerAccountId String
+  accessTokenHash   String?
+  refreshTokenHash  String?
+}
+
+model ApiToken {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  name       String
+  tokenHash  String
+  scopes     String[]
+  createdAt  DateTime     @default(now())
+  lastUsedAt DateTime?
+}
+
+// ----------------------
+// B. Projects & Workflow
+// ----------------------
+
+model Project {
+  id          String        @id @default(cuid())
+  org         Organization  @relation(fields: [orgId], references: [id])
+  orgId       String
+  key         String
+  name        String
+  description String?
+  ownerId     String?
+  status      ProjectStatus @default(active)
+  startDate   DateTime?
+  endDate     DateTime?
+  color       String?
+  deletedAt   DateTime?
+
+  tasks      Task[]
+  members    ProjectMember[]
+  sprints    Sprint[]
+  milestones Milestone[]
+  labels     Label[]
+  files      Attachment[]
+  workflows  Workflow[]
+
+  docs    Doc[]
+  events  Event[]
+  metrics MetricsDaily[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, key])
+  @@index([orgId, status])
+}
+
+model ProjectMember {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  project   Project      @relation(fields: [projectId], references: [id])
+  projectId String
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  role      Role?        @relation(fields: [roleId], references: [id])
+  roleId    String?
+
+  @@unique([projectId, userId])
+}
+
+model Workflow {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  project   Project?     @relation(fields: [projectId], references: [id])
+  projectId String?
+  name      String
+  isDefault Boolean      @default(false)
+
+  statuses WorkflowStatus[]
+
+  @@unique([orgId, projectId, name])
+}
+
+model WorkflowStatus {
+  id         String             @id @default(cuid())
+  org        Organization       @relation(fields: [orgId], references: [id])
+  orgId      String
+  workflow   Workflow           @relation(fields: [workflowId], references: [id])
+  workflowId String
+  name       String
+  key        String
+  position   Int
+  type       WorkflowStatusType
+
+  tasks Task[]
+
+  @@unique([workflowId, key])
+  @@index([workflowId, position])
+}
+
+model Label {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  project   Project?     @relation(fields: [projectId], references: [id])
+  projectId String?
+  name      String
+  color     String?
+  createdAt DateTime     @default(now())
+
+  taskLabels TaskLabel[]
+
+  @@unique([orgId, projectId, name])
+}
+
+model Milestone {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  project     Project      @relation(fields: [projectId], references: [id])
+  projectId   String
+  name        String
+  description String?
+  dueDate     DateTime?
+  status      String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tasks Task[]
+}
+
+model Sprint {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  project   Project      @relation(fields: [projectId], references: [id])
+  projectId String
+  name      String
+  startDate DateTime?
+  endDate   DateTime?
+  goal      String?
+  state     SprintState  @default(planned)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  tasks Task[]
+
+  @@index([projectId, state])
+}
+
+// ----------------------
+// C. Tasks & Collaboration
+// ----------------------
+
+model Task {
+  id             String                   @id @default(cuid())
+  org            Organization             @relation(fields: [orgId], references: [id])
+  orgId          String
+  project        Project                  @relation(fields: [projectId], references: [id])
+  projectId      String
+  number         Int
+  title          String
+  description    String?
+  reporter       User?                    @relation("TaskReporter", fields: [reporterId], references: [id])
+  reporterId     String?
+  assignee       User?                    @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  assigneeId     String?
+  status         WorkflowStatus           @relation(fields: [statusId], references: [id])
+  statusId       String
+  priority       TaskPriority
+  type           TaskType
+  sprint         Sprint?                  @relation(fields: [sprintId], references: [id])
+  sprintId       String?
+  milestone      Milestone?               @relation(fields: [milestoneId], references: [id])
+  milestoneId    String?
+  startDate      DateTime?
+  dueDate        DateTime?
+  estimatePoints Int?
+  estimateHours  Int?
+  parent         Task?                    @relation("Subtasks", fields: [parentId], references: [id])
+  parentId       String?
+  // For drag & drop ordering on boards/lists (keyset pagination friendly)
+  orderKey       Decimal?                 @db.Decimal(20, 10)
+  // Full Text Search vector (Postgres-specific)
+  tsv            Unsupported("tsvector")?
+  version        Int                      @default(1)
+  deletedAt      DateTime?
+
+  subtasks     Task[]           @relation("Subtasks")
+  labels       TaskLabel[]
+  dependencies TaskDependency[] @relation("TaskBlocksSources")
+  blockedBy    TaskDependency[] @relation("TaskBlocksTargets")
+  checklists   Checklist[]
+  comments     Comment[]
+  attachments  Attachment[]
+  watchers     Watcher[]
+  timeEntries  TimeEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, number])
+  @@index([orgId, projectId, statusId])
+  @@index([orgId, assigneeId, statusId])
+  @@index([orgId, dueDate])
+}
+
+model TaskLabel {
+  task    Task   @relation(fields: [taskId], references: [id])
+  taskId  String
+  label   Label  @relation(fields: [labelId], references: [id])
+  labelId String
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+}
+
+model TaskDependency {
+  id           String       @id @default(cuid())
+  org          Organization @relation(fields: [orgId], references: [id])
+  orgId        String
+  task         Task         @relation("TaskBlocksSources", fields: [taskId], references: [id])
+  taskId       String
+  blocksTask   Task         @relation("TaskBlocksTargets", fields: [blocksTaskId], references: [id])
+  blocksTaskId String
+
+  @@unique([taskId, blocksTaskId])
+}
+
+model Checklist {
+  id       String       @id @default(cuid())
+  org      Organization @relation(fields: [orgId], references: [id])
+  orgId    String
+  task     Task         @relation(fields: [taskId], references: [id])
+  taskId   String
+  title    String
+  position Int
+
+  items ChecklistItem[]
+}
+
+model ChecklistItem {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  checklist   Checklist    @relation(fields: [checklistId], references: [id])
+  checklistId String
+  content     String
+  isDone      Boolean      @default(false)
+  position    Int
+}
+
+model Comment {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  task      Task?        @relation(fields: [taskId], references: [id])
+  taskId    String?
+  doc       Doc?         @relation(fields: [docId], references: [id])
+  docId     String?
+  author    User         @relation("CommentAuthor", fields: [authorId], references: [id])
+  authorId  String
+  body      Json // rich text delta/blocks
+  replyTo   Comment?     @relation("CommentReplies", fields: [replyToId], references: [id])
+  replyToId String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  reactions Reaction[]
+  replies   Comment[]  @relation("CommentReplies")
+
+  @@index([taskId, createdAt])
+}
+
+model Reaction {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  comment   Comment      @relation(fields: [commentId], references: [id])
+  commentId String
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  emoji     String
+  createdAt DateTime     @default(now())
+
+  @@unique([commentId, userId, emoji])
+}
+
+model Attachment {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  project    Project?     @relation(fields: [projectId], references: [id])
+  projectId  String?
+  task       Task?        @relation(fields: [taskId], references: [id])
+  taskId     String?
+  doc        Doc?         @relation(fields: [docId], references: [id])
+  docId      String?
+  uploader   User         @relation(fields: [uploaderId], references: [id])
+  uploaderId String
+  filename   String
+  mime       String
+  size       Int
+  storageKey String
+  version    Int          @default(1)
+  createdAt  DateTime     @default(now())
+
+  @@index([taskId])
+  @@index([docId])
+}
+
+model Watcher {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  task      Task         @relation(fields: [taskId], references: [id])
+  taskId    String
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime     @default(now())
+
+  @@unique([taskId, userId])
+}
+
+// ----------------------
+// D. Docs / Wiki (Versioned)
+// ----------------------
+
+model Doc {
+  id          String                   @id @default(cuid())
+  org         Organization             @relation(fields: [orgId], references: [id])
+  orgId       String
+  space       Space?                   @relation(fields: [spaceId], references: [id])
+  spaceId     String?
+  project     Project?                 @relation(fields: [projectId], references: [id])
+  projectId   String?
+  title       String
+  slug        String
+  createdBy   User                     @relation("DocCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  updatedBy   User?                    @relation("DocUpdatedBy", fields: [updatedById], references: [id])
+  updatedById String?
+  isArchived  Boolean                  @default(false)
+  deletedAt   DateTime?
+  tsv         Unsupported("tsvector")?
+
+  versions    DocVersion[]
+  comments    Comment[]
+  linksOut    DocLink[]    @relation("DocLinksOut")
+  linksIn     DocLink[]    @relation("DocLinksIn")
+  attachments Attachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([orgId, slug])
+}
+
+model DocVersion {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  doc         Doc          @relation(fields: [docId], references: [id])
+  docId       String
+  version     Int
+  content     Json
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime     @default(now())
+
+  @@unique([docId, version])
+}
+
+model Space {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  name        String
+  description String?
+  visibility  String?
+  createdAt   DateTime     @default(now())
+
+  docs Doc[]
+}
+
+model DocLink {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  sourceDoc   Doc          @relation("DocLinksOut", fields: [sourceDocId], references: [id])
+  sourceDocId String
+  targetDoc   Doc          @relation("DocLinksIn", fields: [targetDocId], references: [id])
+  targetDocId String
+  relation    String // refs/duplicates/relates
+}
+
+// ----------------------
+// E. Time Tracking & Workload
+// ----------------------
+
+model TimeEntry {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  task      Task         @relation(fields: [taskId], references: [id])
+  taskId    String
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  date      DateTime
+  minutes   Int
+  note      String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([taskId, date])
+  @@index([userId, date])
+}
+
+model CapacityPlan {
+  id              String       @id @default(cuid())
+  org             Organization @relation(fields: [orgId], references: [id])
+  orgId           String
+  user            User         @relation(fields: [userId], references: [id])
+  userId          String
+  weekStartDate   DateTime
+  capacityMinutes Int
+  createdAt       DateTime     @default(now())
+
+  @@unique([userId, weekStartDate])
+}
+
+model Holiday {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  date      DateTime
+  name      String
+  region    String?
+  createdAt DateTime     @default(now())
+}
+
+// ----------------------
+// F. Calendar & Reminders
+// ----------------------
+
+model Event {
+  id          String         @id @default(cuid())
+  org         Organization   @relation(fields: [orgId], references: [id])
+  orgId       String
+  project     Project?       @relation(fields: [projectId], references: [id])
+  projectId   String?
+  title       String
+  startAt     DateTime
+  endAt       DateTime
+  allDay      Boolean        @default(false)
+  location    String?
+  source      SourceCalendar
+  externalId  String?
+  createdBy   User           @relation("EventCreator", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime       @default(now())
+
+  @@index([orgId, startAt])
+}
+
+model Reminder {
+  id         String          @id @default(cuid())
+  org        Organization    @relation(fields: [orgId], references: [id])
+  orgId      String
+  user       User            @relation(fields: [userId], references: [id])
+  userId     String
+  entityType String // task/doc
+  entityId   String
+  remindAt   DateTime
+  channel    ReminderChannel
+  sentAt     DateTime?
+}
+
+// ----------------------
+// G. Notifications & Activity
+// ----------------------
+
+model Notification {
+  id        String       @id @default(cuid())
+  org       Organization @relation(fields: [orgId], references: [id])
+  orgId     String
+  user      User         @relation(fields: [userId], references: [id])
+  userId    String
+  type      String
+  payload   Json
+  isRead    Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  @@index([userId, isRead])
+}
+
+model ActivityLog {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  actor      User?        @relation(fields: [actorId], references: [id])
+  actorId    String?
+  entityType String
+  entityId   String
+  action     String
+  before     Json?
+  after      Json?
+  createdAt  DateTime     @default(now())
+
+  @@index([orgId, entityType, entityId, createdAt])
+}
+
+// ----------------------
+// H. Integrations & Automation
+// ----------------------
+
+model Integration {
+  id        String              @id @default(cuid())
+  org       Organization        @relation(fields: [orgId], references: [id])
+  orgId     String
+  provider  IntegrationProvider
+  status    String
+  settings  Json
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+}
+
+model Webhook {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  targetUrl  String
+  secretHash String
+  eventTypes String[]
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+}
+
+model AutomationRule {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  name       String
+  trigger    String // enum in code (issue.created, task.moved, etc.)
+  conditions Json
+  actions    Json
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model ScheduledReport {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  reportType String
+  filters    Json
+  cron       String
+  lastRunAt  DateTime?
+  nextRunAt  DateTime?
+}
+
+// ----------------------
+// I. Search & Reporting (Denormalized)
+// ----------------------
+
+model SearchIndex {
+  // Typically a materialized view or maintained by triggers/jobs.
+  // Kept as a table here for convenience and Prisma access.
+  id         String                   @id @default(cuid())
+  entityType String
+  entityId   String
+  org        Organization             @relation(fields: [orgId], references: [id])
+  orgId      String
+  tsv        Unsupported("tsvector")?
+  updatedAt  DateTime                 @default(now())
+}
+
+model MetricsDaily {
+  id          String       @id @default(cuid())
+  org         Organization @relation(fields: [orgId], references: [id])
+  orgId       String
+  date        DateTime
+  project     Project?     @relation(fields: [projectId], references: [id])
+  projectId   String?
+  metricKey   String
+  metricValue Decimal      @db.Decimal(20, 4)
+
+  @@index([orgId, date, metricKey])
+}
+
+// ----------------------
+// IV. Custom Fields (EAV)
+// ----------------------
+
+model CustomFieldDef {
+  id         String       @id @default(cuid())
+  org        Organization @relation(fields: [orgId], references: [id])
+  orgId      String
+  scope      String // task/project
+  name       String
+  key        String
+  ctype      String // text/number/date/select/multi
+  options    Json?
+  isRequired Boolean      @default(false)
+
+  values CustomFieldValue[]
+
+  @@unique([orgId, scope, key])
+}
+
+model CustomFieldValue {
+  id          String         @id @default(cuid())
+  org         Organization   @relation(fields: [orgId], references: [id])
+  orgId       String
+  field       CustomFieldDef @relation(fields: [fieldId], references: [id])
+  fieldId     String
+  entityType  String
+  entityId    String
+  valueText   String?
+  valueNumber Float?
+  valueDate   DateTime?
+  valueJson   Json?
+}
+
+// ----------------------
+// Helpful composite indexes aligning with performance notes
+// ----------------------
+
+// NOTE: Many composite indexes are declared above per-model to follow
+// the spec's hot-path queries. Additional operational indexes can be added
+// later with explicit migrations as usage patterns emerge.
