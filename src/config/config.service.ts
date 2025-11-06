@@ -32,7 +32,7 @@ export class ConfigService {
   }
 
   get jwtExpiresIn(): number {
-    return 60 * 60 * 24; // 1 Hari
+    return 60 * 60 * 24 * 1000; // 1 Hari
   }
 
   get nodeEnv(): string {

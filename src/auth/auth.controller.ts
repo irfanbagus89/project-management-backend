@@ -1,19 +1,36 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ConfigService } from '../config/config.service';
+import express from 'express';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private config: ConfigService,
+  ) {}
 
   @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
+  async register(@Body() dto: RegisterDto) {
+    const data = await this.authService.register(dto);
+    return data.user;
   }
 
   @Post('login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const data = await this.authService.login(dto);
+    res.cookie('access_token', data.access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: this.config.jwtExpiresIn,
+    });
+    console.log(this.config.jwtExpiresIn, 'expired');
+    return data.user;
   }
 }

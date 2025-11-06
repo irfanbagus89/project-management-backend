@@ -5,18 +5,19 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigModule } from 'src/config/config.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { ConfigService } from 'src/config/config.service';
+import { ConfigService as AppConfigService } from 'src/config/config.service';
 
 @Module({
   imports: [
     ConfigModule,
     PrismaModule,
     JwtModule.registerAsync({
-      useFactory: (config: ConfigService) => ({
+      imports: [ConfigModule],
+      inject: [AppConfigService],
+      useFactory: (config: AppConfigService) => ({
         secret: config.jwtSecret,
         signOptions: { expiresIn: config.jwtExpiresIn },
       }),
-      inject: [ConfigService],
     }),
   ],
   controllers: [AuthController],

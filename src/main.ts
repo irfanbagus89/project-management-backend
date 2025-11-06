@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
 import { ValidationPipe } from '@nestjs/common';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,10 +16,13 @@ async function bootstrap() {
       transform: true, // Ubah payload jadi instance class DTO
     }),
   );
-
+  app.use(cookieParser());
+  app.useGlobalInterceptors(new ResponseInterceptor());
   const port = configService.port || 3000;
   app.setGlobalPrefix('api'); // semua endpoint diawali /api
-  app.enableCors();
+  app.enableCors({
+    Credential: true,
+  });
 
   await app.listen(port);
   console.log(`🚀 Server running on http://localhost:${port}`);
