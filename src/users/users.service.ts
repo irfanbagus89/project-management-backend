@@ -31,7 +31,6 @@ export class UsersService {
     return this.prisma.user.findMany({
       where,
       select: {
-        id: true,
         email: true,
         name: true,
         avatarUrl: true,
@@ -45,7 +44,6 @@ export class UsersService {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
-        id: true,
         email: true,
         name: true,
         avatarUrl: true,

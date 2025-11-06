@@ -30,7 +30,17 @@ export class AuthController {
       sameSite: 'lax',
       maxAge: this.config.jwtExpiresIn,
     });
-    console.log(this.config.jwtExpiresIn, 'expired');
-    return data.user;
+    return { data: data.user, message: 'Login Berhasil' };
+  }
+
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: express.Response) {
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+
+    return { message: 'Logout berhasil' };
   }
 }
