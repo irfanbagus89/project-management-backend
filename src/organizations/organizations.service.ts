@@ -38,7 +38,7 @@ export class OrganizationsService {
           orgId: org.id,
           name: 'Owner',
           scope: 'org',
-          description: 'Owner organization',
+          description: 'Full access to all resources',
         },
       });
 
@@ -74,6 +74,7 @@ export class OrganizationsService {
         members: { some: { userId } },
       },
       select: {
+        id: true,
         name: true,
         logoUrl: true,
         plan: true,
