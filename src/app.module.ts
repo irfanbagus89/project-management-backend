@@ -8,6 +8,7 @@ import { ProjectsModule } from './projects/project.module';
 import { TenantMiddleware } from './middleware/tenant.middleware';
 import { JwtModule } from '@nestjs/jwt';
 import { TasksModule } from './tasks/tasks.module';
+import { CommentsModule } from './comments/comments.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { TasksModule } from './tasks/tasks.module';
     ProjectsModule,
     JwtModule.register({}),
     TasksModule,
+    CommentsModule,
   ],
 })
 export class AppModule implements NestModule {
