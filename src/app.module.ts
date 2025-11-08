@@ -10,6 +10,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
 import { LabelsModule } from './labels/label.module';
+import { AttachmentsModule } from './attachments/attachments.module';
+import { TimeTrackingModule } from './time-tracking/time-tracking.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { LabelsModule } from './labels/label.module';
     TasksModule,
     CommentsModule,
     LabelsModule,
+    AttachmentsModule,
+    TimeTrackingModule,
   ],
 })
 export class AppModule implements NestModule {
