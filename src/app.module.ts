@@ -12,6 +12,12 @@ import { CommentsModule } from './comments/comments.module';
 import { LabelsModule } from './labels/label.module';
 import { AttachmentsModule } from './attachments/attachments.module';
 import { TimeTrackingModule } from './time-tracking/time-tracking.module';
+import { KalenderModule } from './kalender/kalender.module';
+import { RemindersModule } from './reminder/reminders.module';
+import { ActivityLogModule } from './activity-logs/activity-logs.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SprintsModule } from './sprints/sprints.module';
+import { MilestonesModule } from './milestones/milestones.module';
 
 @Module({
   imports: [
@@ -27,6 +33,12 @@ import { TimeTrackingModule } from './time-tracking/time-tracking.module';
     LabelsModule,
     AttachmentsModule,
     TimeTrackingModule,
+    KalenderModule,
+    RemindersModule,
+    ActivityLogModule,
+    NotificationsModule,
+    SprintsModule,
+    MilestonesModule,
   ],
 })
 export class AppModule implements NestModule {
